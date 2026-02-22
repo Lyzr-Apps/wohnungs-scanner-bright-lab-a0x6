@@ -1,0 +1,102 @@
+{
+  "agent_name": "Match-Analyse & Benachrichtigungs-Agent",
+  "agent_id": "699b6b030263953e570d7a45",
+  "agent_type": "json",
+  "accessor": "json",
+  "has_module_outputs": false,
+  "schedule_id": "699b6b0c399dfadeac38558c",
+  "description": "Analysiert neue Inserate, berechnet Match-Scores und sendet personalisierte E-Mail-Benachrichtigungen.",
+  "response_schema": {
+    "analysis_summary": {
+      "type": "object",
+      "properties": {
+        "total_analyzed": { "type": "number" },
+        "top_matches": { "type": "number" },
+        "good_matches": { "type": "number" },
+        "medium_matches": { "type": "number" },
+        "no_matches": { "type": "number" },
+        "analysis_timestamp": { "type": "string" }
+      },
+      "required": ["total_analyzed", "top_matches", "good_matches", "medium_matches", "no_matches", "analysis_timestamp"]
+    },
+    "scored_listings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "listing_id": { "type": "string" },
+          "title": { "type": "string" },
+          "match_score": { "type": "number" },
+          "score_breakdown": {
+            "type": "object",
+            "properties": {
+              "price_score": { "type": "number" },
+              "size_score": { "type": "number" },
+              "location_score": { "type": "number" },
+              "rooms_score": { "type": "number" },
+              "features_score": { "type": "number" }
+            },
+            "required": ["price_score", "size_score", "location_score", "rooms_score", "features_score"]
+          },
+          "category": { "type": "string" },
+          "cold_rent": { "type": "number" },
+          "warm_rent": { "type": "number" },
+          "size_sqm": { "type": "number" },
+          "rooms": { "type": "number" },
+          "district": { "type": "string" },
+          "listing_url": { "type": "string" }
+        },
+        "required": ["listing_id", "title", "match_score", "score_breakdown", "category", "cold_rent", "warm_rent", "size_sqm", "rooms", "district", "listing_url"]
+      }
+    },
+    "notifications_sent": {
+      "type": "object",
+      "properties": {
+        "immediate_emails": { "type": "number" },
+        "daily_summary": { "type": "boolean" },
+        "recipient_email": { "type": "string" }
+      },
+      "required": ["immediate_emails", "daily_summary", "recipient_email"]
+    },
+    "status": { "type": "string" },
+    "errors": { "type": "array", "items": { "type": "string" } }
+  },
+  "example_response": {
+    "analysis_summary": {
+      "total_analyzed": 12,
+      "top_matches": 2,
+      "good_matches": 4,
+      "medium_matches": 3,
+      "no_matches": 3,
+      "analysis_timestamp": "2026-02-23T08:00:00Z"
+    },
+    "scored_listings": [
+      {
+        "listing_id": "is24-abc123",
+        "title": "Helle 2-Zimmer-Wohnung in Kreuzberg",
+        "match_score": 94,
+        "score_breakdown": {
+          "price_score": 95,
+          "size_score": 90,
+          "location_score": 100,
+          "rooms_score": 100,
+          "features_score": 80
+        },
+        "category": "top_match",
+        "cold_rent": 850,
+        "warm_rent": 1050,
+        "size_sqm": 58,
+        "rooms": 2,
+        "district": "Kreuzberg",
+        "listing_url": "https://immobilienscout24.de/expose/abc123"
+      }
+    ],
+    "notifications_sent": {
+      "immediate_emails": 2,
+      "daily_summary": true,
+      "recipient_email": "user@example.com"
+    },
+    "status": "success",
+    "errors": []
+  }
+}

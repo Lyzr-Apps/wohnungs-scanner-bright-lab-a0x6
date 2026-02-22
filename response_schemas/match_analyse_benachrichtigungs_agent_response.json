@@ -1,0 +1,88 @@
+{
+  "agent_name": "Match-Analyse & Benachrichtigungs-Agent",
+  "agent_id": "699b6b030263953e570d7a45",
+  "description": "Analysiert neue Inserate gegen die gespeicherten Suchkriterien des Nutzers, berechnet einen Match-Score (Gr\u00f6\u00dfe, Preis, Lage, Ausstattung), priorisiert die Ergebnisse und verfasst personalisierte Benachrichtigungs-E-Mails \u2014 sofort f\u00fcr Top-Matches (Score > 90%), als t\u00e4gliche Zusammenfassung f\u00fcr alle anderen.",
+  "agent_type": "json",
+  "accessor": "result",
+  "auto_generated": true,
+  "response_schema": {
+    "analysis_summary": {
+      "total_analyzed": "number",
+      "top_matches": "number",
+      "good_matches": "number",
+      "medium_matches": "number",
+      "no_matches": "number",
+      "analysis_timestamp": "string"
+    },
+    "scored_listings": [
+      {
+        "listing_id": "string",
+        "title": "string",
+        "match_score": "number",
+        "score_breakdown": {
+          "price_score": "number",
+          "size_score": "number",
+          "location_score": "number",
+          "rooms_score": "number",
+          "features_score": "number"
+        },
+        "category": "string",
+        "cold_rent": "number",
+        "warm_rent": "number",
+        "size_sqm": "number",
+        "rooms": "number",
+        "district": "string",
+        "listing_url": "string"
+      }
+    ],
+    "notifications_sent": {
+      "immediate_emails": "number",
+      "daily_summary": "boolean",
+      "recipient_email": "string"
+    },
+    "status": "string",
+    "errors": [
+      "string"
+    ]
+  },
+  "example_response": {
+    "analysis_summary": {
+      "total_analyzed": 0,
+      "top_matches": 0,
+      "good_matches": 0,
+      "medium_matches": 0,
+      "no_matches": 0,
+      "analysis_timestamp": "sample string"
+    },
+    "scored_listings": [
+      {
+        "listing_id": "sample string",
+        "title": "sample string",
+        "match_score": 0,
+        "score_breakdown": {
+          "price_score": 0,
+          "size_score": 0,
+          "location_score": 0,
+          "rooms_score": 0,
+          "features_score": 0
+        },
+        "category": "sample string",
+        "cold_rent": 0,
+        "warm_rent": 0,
+        "size_sqm": 0,
+        "rooms": 0,
+        "district": "sample string",
+        "listing_url": "sample string"
+      }
+    ],
+    "notifications_sent": {
+      "immediate_emails": 0,
+      "daily_summary": false,
+      "recipient_email": "sample string"
+    },
+    "status": "sample string",
+    "errors": [
+      "sample string"
+    ]
+  }
+}

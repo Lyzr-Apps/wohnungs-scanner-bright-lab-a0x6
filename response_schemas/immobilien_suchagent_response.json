@@ -1,0 +1,80 @@
+{
+  "agent_name": "Immobilien-Suchagent",
+  "agent_id": "699b6ac231859b031052a62c",
+  "description": "Simuliert menschliches Browsing-Verhalten auf Immobilienportalen (ImmobilienScout24, WG-Gesucht, Immowelt etc.), navigiert durch Seiten, gibt Suchfilter ein, scrollt, wartet zuf\u00e4llige Intervalle und extrahiert Inseratsdaten. \u00dcbergibt neue Inserate an die Ergebnis-Datenbank.",
+  "agent_type": "json",
+  "accessor": "result",
+  "auto_generated": true,
+  "response_schema": {
+    "search_summary": {
+      "portals_scanned": "number",
+      "total_listings_found": "number",
+      "new_listings": "number",
+      "duplicates_filtered": "number",
+      "search_duration_seconds": "number",
+      "search_timestamp": "string"
+    },
+    "listings": [
+      {
+        "id": "string",
+        "title": "string",
+        "cold_rent": "number",
+        "warm_rent": "number",
+        "size_sqm": "number",
+        "rooms": "number",
+        "address": "string",
+        "district": "string",
+        "availability": "string",
+        "features": [
+          "string"
+        ],
+        "image_urls": [
+          "string"
+        ],
+        "portal": "string",
+        "listing_url": "string",
+        "contact_info": "string"
+      }
+    ],
+    "status": "string",
+    "errors": [
+      "string"
+    ]
+  },
+  "example_response": {
+    "search_summary": {
+      "portals_scanned": 0,
+      "total_listings_found": 0,
+      "new_listings": 0,
+      "duplicates_filtered": 0,
+      "search_duration_seconds": 0,
+      "search_timestamp": "sample string"
+    },
+    "listings": [
+      {
+        "id": "sample string",
+        "title": "sample string",
+        "cold_rent": 0,
+        "warm_rent": 0,
+        "size_sqm": 0,
+        "rooms": 0,
+        "address": "sample string",
+        "district": "sample string",
+        "availability": "sample string",
+        "features": [
+          "sample string"
+        ],
+        "image_urls": [
+          "sample string"
+        ],
+        "portal": "sample string",
+        "listing_url": "sample string",
+        "contact_info": "sample string"
+      }
+    ],
+    "status": "sample string",
+    "errors": [
+      "sample string"
+    ]
+  }
+}

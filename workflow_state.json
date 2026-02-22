@@ -1,0 +1,88 @@
+{
+  "app_name": "WohnungsRadar",
+  "created_at": "2026-02-22T20:44:00Z",
+  "agent_ids": [
+    "699b6ac231859b031052a62c",
+    "699b6b030263953e570d7a45"
+  ],
+  "agents": {
+    "immobilien_suchagent": {
+      "agent_id": "699b6ac231859b031052a62c",
+      "name": "Immobilien-Suchagent",
+      "node_id": "search_agent",
+      "provider": "openai",
+      "model": "gpt-4.1",
+      "temperature": 0.3,
+      "top_p": 1,
+      "agent_type": "json",
+      "accessor": "json",
+      "tools": [],
+      "has_knowledge_base": false,
+      "has_schedule": true,
+      "schedule_id": "699b6aca399dfadeac385562",
+      "schedule_cron": "0 */6 * * *",
+      "schedule_timezone": "Europe/Berlin",
+      "schedule_message": "Durchsuche alle konfigurierten Immobilienportale nach neuen Wohnungsinseraten. Verwende die gespeicherten Suchkriterien: Berlin, Mitte/Kreuzberg/Neukoelln/Friedrichshain/Prenzlauer Berg, 40-80m2, max 1200 EUR, 2-3 Zimmer. Simuliere menschliches Browsing-Verhalten mit zufaelligen Pausen und Scrolling.",
+      "image_output": false,
+      "voice": false,
+      "file_output": false
+    },
+    "match_analyse_agent": {
+      "agent_id": "699b6b030263953e570d7a45",
+      "name": "Match-Analyse & Benachrichtigungs-Agent",
+      "node_id": "match_agent",
+      "provider": "openai",
+      "model": "gpt-4.1",
+      "temperature": 0.4,
+      "top_p": 1,
+      "agent_type": "json",
+      "accessor": "json",
+      "tools": [
+        {
+          "tool_name": "gmail",
+          "action_names": ["GMAIL_SEND_EMAIL"],
+          "tool_source": "composio"
+        }
+      ],
+      "has_knowledge_base": false,
+      "has_schedule": true,
+      "schedule_id": "699b6b0c399dfadeac38558c",
+      "schedule_cron": "0 8 * * *",
+      "schedule_timezone": "Europe/Berlin",
+      "schedule_message": "Analysiere alle neuen Wohnungsinserate seit dem letzten Durchlauf. Vergleiche mit den Suchkriterien: Berlin, Mitte/Kreuzberg/Neukoelln/Friedrichshain/Prenzlauer Berg, 40-80m2, max 1200 EUR, 2-3 Zimmer. Berechne Match-Scores und sende eine taegliche Zusammenfassung per E-Mail.",
+      "image_output": false,
+      "voice": false,
+      "file_output": false
+    }
+  },
+  "schedule_ids": [
+    "699b6aca399dfadeac385562",
+    "699b6b0c399dfadeac38558c"
+  ],
+  "schedules": {
+    "search_schedule": {
+      "schedule_id": "699b6aca399dfadeac385562",
+      "agent_id": "699b6ac231859b031052a62c",
+      "agent_name": "Immobilien-Suchagent",
+      "cron_expression": "0 */6 * * *",
+      "timezone": "Europe/Berlin",
+      "description": "Runs every 6 hours to scan apartment portals",
+      "is_active": true,
+      "next_run": "2026-02-23T00:00:00+01:00"
+    },
+    "match_schedule": {
+      "schedule_id": "699b6b0c399dfadeac38558c",
+      "agent_id": "699b6b030263953e570d7a45",
+      "agent_name": "Match-Analyse & Benachrichtigungs-Agent",
+      "cron_expression": "0 8 * * *",
+      "timezone": "Europe/Berlin",
+      "description": "Runs daily at 8:00 AM to analyze matches and send email summaries",
+      "is_active": true,
+      "next_run": "2026-02-23T08:00:00+01:00"
+    }
+  },
+  "rag_ids": [],
+  "workflow_pattern": "sequential_independent",
+  "total_agents": 2,
+  "total_schedules": 2
+}

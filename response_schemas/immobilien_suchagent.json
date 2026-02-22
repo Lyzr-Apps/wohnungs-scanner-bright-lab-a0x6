@@ -1,0 +1,78 @@
+{
+  "agent_name": "Immobilien-Suchagent",
+  "agent_id": "699b6ac231859b031052a62c",
+  "agent_type": "json",
+  "accessor": "json",
+  "has_module_outputs": false,
+  "schedule_id": "699b6aca399dfadeac385562",
+  "description": "Simuliert menschliches Browsing-Verhalten auf Immobilienportalen und extrahiert Inseratsdaten.",
+  "response_schema": {
+    "search_summary": {
+      "type": "object",
+      "properties": {
+        "portals_scanned": { "type": "number" },
+        "total_listings_found": { "type": "number" },
+        "new_listings": { "type": "number" },
+        "duplicates_filtered": { "type": "number" },
+        "search_duration_seconds": { "type": "number" },
+        "search_timestamp": { "type": "string" }
+      },
+      "required": ["portals_scanned", "total_listings_found", "new_listings", "duplicates_filtered", "search_duration_seconds", "search_timestamp"]
+    },
+    "listings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "cold_rent": { "type": "number" },
+          "warm_rent": { "type": "number" },
+          "size_sqm": { "type": "number" },
+          "rooms": { "type": "number" },
+          "address": { "type": "string" },
+          "district": { "type": "string" },
+          "availability": { "type": "string" },
+          "features": { "type": "array", "items": { "type": "string" } },
+          "image_urls": { "type": "array", "items": { "type": "string" } },
+          "portal": { "type": "string" },
+          "listing_url": { "type": "string" },
+          "contact_info": { "type": "string" }
+        },
+        "required": ["id", "title", "cold_rent", "warm_rent", "size_sqm", "rooms", "address", "district", "availability", "features", "image_urls", "portal", "listing_url", "contact_info"]
+      }
+    },
+    "status": { "type": "string" },
+    "errors": { "type": "array", "items": { "type": "string" } }
+  },
+  "example_response": {
+    "search_summary": {
+      "portals_scanned": 3,
+      "total_listings_found": 47,
+      "new_listings": 12,
+      "duplicates_filtered": 35,
+      "search_duration_seconds": 245,
+      "search_timestamp": "2026-02-22T20:00:00Z"
+    },
+    "listings": [
+      {
+        "id": "is24-abc123",
+        "title": "Helle 2-Zimmer-Wohnung in Kreuzberg",
+        "cold_rent": 850,
+        "warm_rent": 1050,
+        "size_sqm": 58,
+        "rooms": 2,
+        "address": "Oranienstrasse 42, 10999 Berlin",
+        "district": "Kreuzberg",
+        "availability": "01.04.2026",
+        "features": ["Balkon", "Einbaukueche", "Parkett"],
+        "image_urls": ["https://example.com/img1.jpg"],
+        "portal": "ImmobilienScout24",
+        "listing_url": "https://immobilienscout24.de/expose/abc123",
+        "contact_info": "Hausverwaltung Mueller, Tel: 030-1234567"
+      }
+    ],
+    "status": "success",
+    "errors": []
+  }
+}

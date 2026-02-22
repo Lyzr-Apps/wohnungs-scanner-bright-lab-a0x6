@@ -1,0 +1,104 @@
+{
+  "workflow": {
+    "name": "WohnungsRadar",
+    "description": "Intelligent apartment search dashboard with automated search and match analysis agents",
+    "nodes": [
+      {
+        "id": "input_node",
+        "type": "Input",
+        "label": "Suchkriterien",
+        "nodeCategory": "input"
+      },
+      {
+        "id": "search_agent",
+        "type": "Agent",
+        "label": "Immobilien-Suchagent",
+        "nodeCategory": "agent",
+        "agent_id": "699b6ac231859b031052a62c",
+        "schedule_id": "699b6aca399dfadeac385562",
+        "schedule_cron": "0 */6 * * *",
+        "schedule_timezone": "Europe/Berlin"
+      },
+      {
+        "id": "match_agent",
+        "type": "Agent",
+        "label": "Match-Analyse Agent",
+        "nodeCategory": "agent",
+        "agent_id": "699b6b030263953e570d7a45",
+        "schedule_id": "699b6b0c399dfadeac38558c",
+        "schedule_cron": "0 8 * * *",
+        "schedule_timezone": "Europe/Berlin"
+      },
+      {
+        "id": "output_node",
+        "type": "Output",
+        "label": "Ergebnisse & E-Mail",
+        "nodeCategory": "end"
+      }
+    ],
+    "edges": [
+      {
+        "source": "input_node",
+        "target": "search_agent"
+      },
+      {
+        "source": "search_agent",
+        "target": "match_agent"
+      },
+      {
+        "source": "match_agent",
+        "target": "output_node"
+      }
+    ]
+  },
+  "agents": [
+    {
+      "node_id": "search_agent",
+      "agent_id": "699b6ac231859b031052a62c",
+      "name": "Immobilien-Suchagent",
+      "description": "Simuliert menschliches Browsing-Verhalten auf Immobilienportalen (ImmobilienScout24, WG-Gesucht, Immowelt etc.), navigiert durch Seiten, gibt Suchfilter ein, scrollt, wartet zufaellige Intervalle und extrahiert Inseratsdaten.",
+      "provider": "openai",
+      "model": "gpt-4.1",
+      "temperature": 0.3,
+      "top_p": 1,
+      "tools": [],
+      "has_schedule": true,
+      "schedule_id": "699b6aca399dfadeac385562",
+      "schedule_cron": "0 */6 * * *",
+      "schedule_timezone": "Europe/Berlin",
+      "agent_type": "json",
+      "capabilities": {
+        "image_output": false,
+        "voice": false,
+        "file_output": false
+      }
+    },
+    {
+      "node_id": "match_agent",
+      "agent_id": "699b6b030263953e570d7a45",
+      "name": "Match-Analyse & Benachrichtigungs-Agent",
+      "description": "Analysiert neue Inserate gegen die gespeicherten Suchkriterien des Nutzers, berechnet einen Match-Score, priorisiert die Ergebnisse und verfasst personalisierte Benachrichtigungs-E-Mails.",
+      "provider": "openai",
+      "model": "gpt-4.1",
+      "temperature": 0.4,
+      "top_p": 1,
+      "tools": [
+        {
+          "tool_name": "gmail",
+          "action_names": ["GMAIL_SEND_EMAIL"],
+          "tool_source": "composio"
+        }
+      ],
+      "has_schedule": true,
+      "schedule_id": "699b6b0c399dfadeac38558c",
+      "schedule_cron": "0 8 * * *",
+      "schedule_timezone": "Europe/Berlin",
+      "agent_type": "json",
+      "capabilities": {
+        "image_output": false,
+        "voice": false,
+        "file_output": false
+      }
+    }
+  ]
+}
