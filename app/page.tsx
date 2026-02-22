@@ -262,27 +262,19 @@ const ALL_PORTALS = ['ImmobilienScout24', 'WG-Gesucht', 'Immowelt']
 // HELPERS
 // ---------------------------------------------------------------------------
 
-function renderMarkdown(text: string) {
-  if (!text) return null
-  return (
-    <div className="space-y-2">
-      {text.split('\n').map((line, i) => {
-        if (line.startsWith('### ')) return <h4 key={i} className="font-semibold text-sm mt-3 mb-1">{line.slice(4)}</h4>
-        if (line.startsWith('## ')) return <h3 key={i} className="font-semibold text-base mt-3 mb-1">{line.slice(3)}</h3>
-        if (line.startsWith('# ')) return <h2 key={i} className="font-bold text-lg mt-4 mb-2">{line.slice(2)}</h2>
-        if (line.startsWith('- ') || line.startsWith('* ')) return <li key={i} className="ml-4 list-disc text-sm">{formatInline(line.slice(2))}</li>
-        if (/^\d+\.\s/.test(line)) return <li key={i} className="ml-4 list-decimal text-sm">{formatInline(line.replace(/^\d+\.\s/, ''))}</li>
-        if (!line.trim()) return <div key={i} className="h-1" />
-        return <p key={i} className="text-sm">{formatInline(line)}</p>
-      })}
-    </div>
-  )
-}
-
-function formatInline(text: string) {
-  const parts = text.split(/\*\*(.*?)\*\*/g)
-  if (parts.length === 1) return text
-  return parts.map((part, i) => i % 2 === 1 ? <strong key={i} className="font-semibold">{part}</strong> : part)
+/**
+ * Safely extract the result data from an agent response.
+ * Handles various response shapes that callAIAgent may return.
+ */
+function safeGetResult(result: any): any {
+  try {
+    if (result?.response?.result && typeof result.response.result === 'object') return result.response.result
+    if (result?.response && typeof result.response === 'object' && !result.response.result) return result.response
+    if (result?.result && typeof result.result === 'object') return result.result
+    return {}
+  } catch {
+    return {}
+  }
 }
 
 function getScoreColor(score: number): string {
@@ -300,31 +292,77 @@ function getScoreBorderClass(score: number): string {
 }
 
 function getPortalShort(portal: string): string {
+  if (!portal) return '---'
   if (portal.includes('Scout')) return 'IS24'
   if (portal.includes('WG')) return 'WG-G'
   if (portal.includes('Immowelt')) return 'IW'
   return portal.slice(0, 4)
 }
 
-function formatTimestamp(ts: string): string {
+/**
+ * Format a timestamp in a hydration-safe way.
+ * Uses UTC-based manual formatting to avoid server/client timezone mismatch.
+ * The `mounted` param is used so that during SSR we show a stable placeholder,
+ * and after hydration we show the user's local time.
+ */
+function formatTimestampSafe(ts: string, isMounted: boolean): string {
   if (!ts) return '---'
   try {
     const d = new Date(ts)
-    return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    if (isNaN(d.getTime())) return ts
+    if (!isMounted) {
+      // During SSR / before hydration: use UTC to avoid mismatch
+      const day = String(d.getUTCDate()).padStart(2, '0')
+      const month = String(d.getUTCMonth() + 1).padStart(2, '0')
+      const year = d.getUTCFullYear()
+      const hour = String(d.getUTCHours()).padStart(2, '0')
+      const min = String(d.getUTCMinutes()).padStart(2, '0')
+      return `${day}.${month}.${year}, ${hour}:${min}`
+    }
+    // After mount: use local time safely
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const year = d.getFullYear()
+    const hour = String(d.getHours()).padStart(2, '0')
+    const min = String(d.getMinutes()).padStart(2, '0')
+    return `${day}.${month}.${year}, ${hour}:${min}`
   } catch {
     return ts
   }
 }
 
+/**
+ * Get the listing ID from a listing, handling both `id` and `listing_id` fields.
+ * The match agent returns `listing_id`, while the search agent uses `id`.
+ */
+function getListingId(listing: Listing): string {
+  return listing?.id ?? listing?.listing_id ?? ''
+}
+
 // ---------------------------------------------------------------------------
 // SVG Circular Score
 // ---------------------------------------------------------------------------
-function CircularScore({ score, size = 48 }: { score: number; size?: number }) {
+function CircularScore({ score, size = 48, unscored = false }: { score: number; size?: number; unscored?: boolean }) {
+  const safeScore = typeof score === 'number' && !isNaN(score) ? Math.max(0, Math.min(100, score)) : 0
   const radius = (size - 6) / 2
   const circumference = 2 * Math.PI * radius
-  const offset = circumference - (score / 100) * circumference
-  const color = getScoreColor(score)
-  const glowClass = score >= 90 ? 'drop-shadow-[0_0_6px_hsl(160,70%,45%)]' : ''
+
+  // If unscored (no match_score set), show a neutral "?" indicator
+  if (unscored) {
+    return (
+      <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+        <svg width={size} height={size} className="-rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="hsl(220,15%,20%)" strokeWidth={3} />
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="hsl(220,12%,55%)" strokeWidth={3} strokeDasharray={`${circumference * 0.05} ${circumference * 0.1}`} strokeLinecap="round" />
+        </svg>
+        <span className="absolute text-[10px] font-bold font-mono text-muted-foreground">N/A</span>
+      </div>
+    )
+  }
+
+  const offset = circumference - (safeScore / 100) * circumference
+  const color = getScoreColor(safeScore)
+  const glowClass = safeScore >= 90 ? 'drop-shadow-[0_0_6px_hsl(160,70%,45%)]' : ''
 
   return (
     <div className={cn('relative inline-flex items-center justify-center', glowClass)} style={{ width: size, height: size }}>
@@ -332,7 +370,7 @@ function CircularScore({ score, size = 48 }: { score: number; size?: number }) {
         <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="hsl(220,15%,20%)" strokeWidth={3} />
         <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={3} strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" className="transition-all duration-700" />
       </svg>
-      <span className="absolute text-xs font-bold font-mono" style={{ color }}>{score}%</span>
+      <span className="absolute text-xs font-bold font-mono" style={{ color }}>{safeScore}%</span>
     </div>
   )
 }
@@ -341,40 +379,43 @@ function CircularScore({ score, size = 48 }: { score: number; size?: number }) {
 // LISTING CARD
 // ---------------------------------------------------------------------------
 function ListingCard({ listing, onSelect, onToggleFav, isFav }: { listing: Listing; onSelect: (l: Listing) => void; onToggleFav: (id: string) => void; isFav: boolean }) {
-  const score = listing.match_score ?? 0
+  const score = listing?.match_score ?? 0
+  // A listing is "unscored" when match_score was never set by the Match-Analyse Agent
+  const isUnscored = listing?.match_score === undefined || listing?.match_score === null
+  const lid = getListingId(listing)
   return (
-    <Card className={cn('bg-card hover:bg-secondary/50 transition-all duration-200 cursor-pointer group overflow-hidden', getScoreBorderClass(score))} onClick={() => onSelect(listing)}>
+    <Card className={cn('bg-card hover:bg-secondary/50 transition-all duration-200 cursor-pointer group overflow-hidden', isUnscored ? 'border-l-4 border-l-[hsl(220,15%,25%)]' : getScoreBorderClass(score))} onClick={() => onSelect(listing)}>
       <CardContent className="p-3 space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <h4 className="text-sm font-semibold leading-tight truncate text-foreground">{listing.title}</h4>
+            <h4 className="text-sm font-semibold leading-tight truncate text-foreground">{listing?.title ?? 'Unbekannt'}</h4>
             <div className="flex items-center gap-1 mt-1 text-muted-foreground">
               <MapPin className="h-3 w-3 flex-shrink-0" />
-              <span className="text-xs truncate">{listing.address}</span>
+              <span className="text-xs truncate">{listing?.address ?? '---'}</span>
             </div>
           </div>
-          <CircularScore score={score} size={44} />
+          <CircularScore score={score} size={44} unscored={isUnscored} />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-bold text-foreground">{listing.cold_rent} EUR</span>
+          <span className="text-sm font-bold text-foreground">{listing?.cold_rent ?? 0} EUR</span>
           <span className="text-xs text-muted-foreground">kalt</span>
           <span className="text-xs text-muted-foreground">/</span>
-          <span className="text-xs text-muted-foreground">{listing.warm_rent} EUR warm</span>
+          <span className="text-xs text-muted-foreground">{listing?.warm_rent ?? 0} EUR warm</span>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span>{listing.size_sqm} m2</span>
-          <span>{listing.rooms} Zi.</span>
-          <span>{listing.availability}</span>
+          <span>{listing?.size_sqm ?? 0} m2</span>
+          <span>{listing?.rooms ?? 0} Zi.</span>
+          <span>{listing?.availability ?? '---'}</span>
         </div>
         <div className="flex items-center justify-between gap-1">
           <div className="flex items-center gap-1 flex-wrap">
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{listing.district}</Badge>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{getPortalShort(listing.portal)}</Badge>
-            {Array.isArray(listing.features) && listing.features.slice(0, 2).map(f => (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{listing?.district ?? '---'}</Badge>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{getPortalShort(listing?.portal ?? '')}</Badge>
+            {Array.isArray(listing?.features) && listing.features.slice(0, 2).map(f => (
               <Badge key={f} variant="secondary" className="text-[10px] px-1.5 py-0 bg-muted">{f}</Badge>
             ))}
           </div>
-          <button onClick={(e) => { e.stopPropagation(); onToggleFav(listing.id) }} className="p-1 hover:scale-110 transition-transform">
+          <button onClick={(e) => { e.stopPropagation(); onToggleFav(lid) }} className="p-1 hover:scale-110 transition-transform">
             <Heart className={cn('h-4 w-4', isFav ? 'fill-red-500 text-red-500' : 'text-muted-foreground hover:text-red-400')} />
           </button>
         </div>
@@ -446,6 +487,10 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 // MAIN PAGE
 // ============================================================================
 export default function Page() {
+  // --- Hydration guard: prevents server/client mismatch for date formatting ---
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
   // --- Navigation ---
   const [activeNav, setActiveNav] = useState<NavSection>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -474,9 +519,13 @@ export default function Page() {
   const [scheduleLogs, setScheduleLogs] = useState<ExecutionLog[]>([])
   const [schedLoading, setSchedLoading] = useState(false)
   const [schedError, setSchedError] = useState('')
+  const [schedInitLoading, setSchedInitLoading] = useState(true)
 
   // --- Countdown timer ---
   const [countdown, setCountdown] = useState('--:--:--')
+
+  // --- Hydration-safe date formatter ---
+  const fmtTs = useCallback((ts: string) => formatTimestampSafe(ts, mounted), [mounted])
 
   // --- Filter state for Ergebnisse ---
   const [scoreFilter, setScoreFilter] = useState(0)
@@ -492,16 +541,30 @@ export default function Page() {
   useEffect(() => {
     try {
       const savedFavs = localStorage.getItem('wr_favorites')
-      if (savedFavs) setFavorites(JSON.parse(savedFavs))
+      if (savedFavs) {
+        const parsed = JSON.parse(savedFavs)
+        if (Array.isArray(parsed)) setFavorites(parsed)
+      }
+    } catch { /* ignore */ }
+    try {
       const savedProfile = localStorage.getItem('wr_profile')
-      if (savedProfile) setProfile(JSON.parse(savedProfile))
+      if (savedProfile) {
+        const parsed = JSON.parse(savedProfile)
+        if (parsed && typeof parsed === 'object') setProfile(prev => ({ ...prev, ...parsed }))
+      }
+    } catch { /* ignore */ }
+    try {
       const savedEmail = localStorage.getItem('wr_email')
-      if (savedEmail) setRecipientEmail(savedEmail)
+      if (savedEmail && typeof savedEmail === 'string') setRecipientEmail(savedEmail)
+    } catch { /* ignore */ }
+    try {
       const savedListings = localStorage.getItem('wr_listings')
       if (savedListings) {
         const parsed = JSON.parse(savedListings)
         if (Array.isArray(parsed) && parsed.length > 0) setListings(parsed)
       }
+    } catch { /* ignore */ }
+    try {
       const savedRuns = localStorage.getItem('wr_runs')
       if (savedRuns) {
         const parsed = JSON.parse(savedRuns)
@@ -518,57 +581,83 @@ export default function Page() {
   // --- Countdown timer effect ---
   useEffect(() => {
     const computeCountdown = () => {
-      const now = new Date()
-      const hours = now.getHours()
-      const nextSlot = Math.ceil((hours + 1) / 6) * 6
-      const next = new Date(now)
-      next.setHours(nextSlot, 0, 0, 0)
-      if (next.getTime() <= now.getTime()) {
-        next.setHours(next.getHours() + 6)
+      try {
+        const now = new Date()
+        const hours = now.getHours()
+        const nextSlot = Math.ceil((hours + 1) / 6) * 6
+        const next = new Date(now)
+        next.setHours(nextSlot, 0, 0, 0)
+        if (next.getTime() <= now.getTime()) {
+          next.setDate(next.getDate() + 1)
+          next.setHours(0, 0, 0, 0)
+        }
+        const diff = Math.max(0, next.getTime() - now.getTime())
+        const h = Math.floor(diff / 3600000)
+        const m = Math.floor((diff % 3600000) / 60000)
+        const s = Math.floor((diff % 60000) / 1000)
+        setCountdown(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`)
+      } catch {
+        setCountdown('--:--:--')
       }
-      const diff = next.getTime() - now.getTime()
-      const h = Math.floor(diff / 3600000)
-      const m = Math.floor((diff % 3600000) / 60000)
-      const s = Math.floor((diff % 60000) / 1000)
-      setCountdown(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`)
     }
     computeCountdown()
     const iv = setInterval(computeCountdown, 1000)
     return () => clearInterval(iv)
   }, [])
 
-  // --- Load schedules ---
+  // --- Load schedules (resilient) ---
   const loadSchedules = useCallback(async () => {
     setSchedLoading(true)
     setSchedError('')
     try {
       const res = await listSchedules()
-      if (res.success) {
-        setSchedules(Array.isArray(res.schedules) ? res.schedules : [])
+      if (res?.success) {
+        setSchedules(Array.isArray(res?.schedules) ? res.schedules : [])
       } else {
-        setSchedError(res.error ?? 'Fehler beim Laden der Zeitplaene')
+        setSchedError(res?.error ?? 'Fehler beim Laden der Zeitplaene')
       }
-    } catch {
-      setSchedError('Netzwerkfehler')
+    } catch (err) {
+      // fetchWrapper can return undefined causing .json() to crash -
+      // catch that here silently
+      setSchedError('Zeitplaene konnten nicht geladen werden')
     }
     setSchedLoading(false)
   }, [])
 
   const loadScheduleLogs = useCallback(async (scheduleId: string) => {
+    if (!scheduleId) return
     try {
       const res = await getScheduleLogs(scheduleId, { limit: 20 })
-      if (res.success) {
-        setScheduleLogs(Array.isArray(res.executions) ? res.executions : [])
+      if (res?.success) {
+        setScheduleLogs(Array.isArray(res?.executions) ? res.executions : [])
       }
-    } catch { /* ignore */ }
+    } catch {
+      // Silently handle - fetchWrapper may return undefined
+    }
   }, [])
 
+  // --- Initial schedule load on mount (non-blocking, non-crashing) ---
   useEffect(() => {
-    loadSchedules()
+    let mounted = true
+    const initLoad = async () => {
+      try {
+        // Small delay to let the sandbox/backend warm up
+        await new Promise(r => setTimeout(r, 1500))
+        if (!mounted) return
+        await loadSchedules()
+      } catch {
+        // Never let initial schedule load crash the page
+      } finally {
+        if (mounted) setSchedInitLoading(false)
+      }
+    }
+    initLoad()
+    return () => { mounted = false }
   }, [loadSchedules])
 
   // --- Toggle favorite ---
   const toggleFavorite = useCallback((id: string) => {
+    if (!id) return
     setFavorites(prev => prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id])
   }, [])
 
@@ -581,14 +670,14 @@ export default function Page() {
     try {
       const msg = `Suche Wohnungen in ${profile.city}, Bezirke: ${profile.districts.join(', ')}, ${profile.size_min}-${profile.size_max} m2, max ${profile.max_rent} EUR kalt, ${profile.rooms} Zimmer, Features: ${profile.features.join(', ')}, Portale: ${profile.portals.join(', ')}`
       const result = await callAIAgent(msg, SEARCH_AGENT_ID)
-      if (result.success) {
-        const data = result?.response?.result
+      if (result?.success) {
+        const data = safeGetResult(result)
         const newListings = Array.isArray(data?.listings) ? data.listings : []
         const summary: SearchSummary | null = data?.search_summary ?? null
         if (newListings.length > 0) {
           setListings(prev => {
             const merged = [...newListings, ...prev]
-            const unique = merged.filter((l: Listing, idx: number) => merged.findIndex((m: Listing) => m.id === l.id) === idx)
+            const unique = merged.filter((l: Listing, idx: number) => merged.findIndex((m: Listing) => getListingId(m) === getListingId(l)) === idx)
             try { localStorage.setItem('wr_listings', JSON.stringify(unique)) } catch {}
             return unique
           })
@@ -607,7 +696,7 @@ export default function Page() {
           try { localStorage.setItem('wr_runs', JSON.stringify(updated)) } catch {}
           return updated
         })
-        setStatusMessage(`Suche abgeschlossen: ${newRun.results_found} Treffer, ${newRun.new_listings} neu`)
+        setStatusMessage(`Suche abgeschlossen: ${newRun.results_found} Treffer, ${newRun.new_listings} neu. Starte die Match-Analyse (Einstellungen > E-Mail), um Scores zu berechnen.`)
         setStatusType('success')
       } else {
         setStatusMessage(result?.error ?? 'Fehler bei der Suche')
@@ -634,20 +723,30 @@ export default function Page() {
     setStatusType('info')
     try {
       const listingsData = listings.slice(0, 20).map(l => ({
-        id: l.id, title: l.title, cold_rent: l.cold_rent, warm_rent: l.warm_rent,
-        size_sqm: l.size_sqm, rooms: l.rooms, district: l.district, features: l.features
+        id: getListingId(l), title: l?.title ?? '', cold_rent: l?.cold_rent ?? 0, warm_rent: l?.warm_rent ?? 0,
+        size_sqm: l?.size_sqm ?? 0, rooms: l?.rooms ?? 0, district: l?.district ?? '', features: Array.isArray(l?.features) ? l.features : []
       }))
       const msg = `Analysiere folgende Inserate und sende Benachrichtigung an ${recipientEmail}. Suchkriterien: ${profile.size_min}-${profile.size_max} m2, max ${profile.max_rent} EUR, ${profile.rooms} Zimmer, Bezirke: ${profile.districts.join(', ')}, Features: ${profile.features.join(', ')}. Inserate: ${JSON.stringify(listingsData)}`
       const result = await callAIAgent(msg, MATCH_AGENT_ID)
-      if (result.success) {
-        const data = result?.response?.result
+      if (result?.success) {
+        const data = safeGetResult(result)
         const scored = Array.isArray(data?.scored_listings) ? data.scored_listings : []
         if (scored.length > 0) {
           setListings(prev => {
             const updated = prev.map(l => {
-              const match = scored.find((s: Listing) => (s?.listing_id ?? s?.id) === l.id)
+              const lid = getListingId(l)
+              // Match agent uses `listing_id` field, search agent uses `id`
+              const match = scored.find((s: any) => {
+                const sId = s?.listing_id ?? s?.id ?? ''
+                return sId === lid
+              })
               if (match) {
-                return { ...l, match_score: match.match_score, score_breakdown: match.score_breakdown, category: match.category }
+                return {
+                  ...l,
+                  match_score: typeof match?.match_score === 'number' ? match.match_score : l.match_score,
+                  score_breakdown: match?.score_breakdown ?? l.score_breakdown,
+                  category: match?.category ?? l.category
+                }
               }
               return l
             })
@@ -670,46 +769,77 @@ export default function Page() {
     setActiveAgentId(null)
   }, [recipientEmail, listings, profile])
 
-  // --- Schedule controls ---
+  // --- Schedule controls (wrapped in try/catch for fetchWrapper undefined) ---
   const handleToggleSchedule = useCallback(async (sched: Schedule) => {
+    if (!sched?.id) return
     setSchedLoading(true)
-    if (sched.is_active) {
-      await pauseSchedule(sched.id)
-    } else {
-      await resumeSchedule(sched.id)
+    try {
+      if (sched.is_active) {
+        await pauseSchedule(sched.id)
+      } else {
+        await resumeSchedule(sched.id)
+      }
+    } catch {
+      // fetchWrapper can return undefined - silently handle
     }
-    await loadSchedules()
+    try {
+      await loadSchedules()
+    } catch {
+      // If refresh fails, don't crash
+    }
     setSchedLoading(false)
   }, [loadSchedules])
 
   const handleTriggerNow = useCallback(async (scheduleId: string) => {
+    if (!scheduleId) return
     setSchedLoading(true)
-    await triggerScheduleNow(scheduleId)
-    setStatusMessage('Zeitplan manuell ausgeloest')
-    setStatusType('success')
+    try {
+      await triggerScheduleNow(scheduleId)
+      setStatusMessage('Zeitplan manuell ausgeloest')
+      setStatusType('success')
+    } catch {
+      setStatusMessage('Fehler beim manuellen Ausloesen')
+      setStatusType('error')
+    }
     setSchedLoading(false)
   }, [])
 
   // --- Filtered & sorted listings ---
   const filteredListings = useMemo(() => {
     let items = sampleData ? [...listings] : []
-    if (scoreFilter > 0) items = items.filter(l => (l.match_score ?? 0) >= scoreFilter)
-    if (priceMax < 2000) items = items.filter(l => l.cold_rent <= priceMax)
-    if (portalFilter !== 'all') items = items.filter(l => l.portal === portalFilter)
+    if (scoreFilter > 0) items = items.filter(l => (l?.match_score ?? 0) >= scoreFilter)
+    if (priceMax < 2000) items = items.filter(l => (l?.cold_rent ?? 0) <= priceMax)
+    if (portalFilter !== 'all') items = items.filter(l => l?.portal === portalFilter)
     items.sort((a, b) => {
       let va = 0
       let vb = 0
-      if (sortBy === 'score') { va = a.match_score ?? 0; vb = b.match_score ?? 0 }
-      else if (sortBy === 'price') { va = a.cold_rent; vb = b.cold_rent }
-      else if (sortBy === 'size') { va = a.size_sqm; vb = b.size_sqm }
+      if (sortBy === 'score') { va = a?.match_score ?? 0; vb = b?.match_score ?? 0 }
+      else if (sortBy === 'price') { va = a?.cold_rent ?? 0; vb = b?.cold_rent ?? 0 }
+      else if (sortBy === 'size') { va = a?.size_sqm ?? 0; vb = b?.size_sqm ?? 0 }
       return sortDir === 'desc' ? vb - va : va - vb
     })
     return items
   }, [listings, scoreFilter, priceMax, portalFilter, sortBy, sortDir, sampleData])
 
-  const favoriteListings = useMemo(() => listings.filter(l => favorites.includes(l.id)), [listings, favorites])
-  const topMatches = useMemo(() => [...listings].filter(l => (l.match_score ?? 0) >= 90).sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0)), [listings])
-  const recentListings = useMemo(() => [...listings].slice(0, 6), [listings])
+  const favoriteListings = useMemo(() => {
+    if (!Array.isArray(listings) || !Array.isArray(favorites)) return []
+    return listings.filter(l => favorites.includes(getListingId(l)))
+  }, [listings, favorites])
+
+  const topMatches = useMemo(() => {
+    if (!Array.isArray(listings)) return []
+    return [...listings].filter(l => (l?.match_score ?? 0) >= 90).sort((a, b) => (b?.match_score ?? 0) - (a?.match_score ?? 0))
+  }, [listings])
+
+  const recentListings = useMemo(() => {
+    if (!Array.isArray(listings)) return []
+    return [...listings].slice(0, 6)
+  }, [listings])
+
+  const unscoredCount = useMemo(() => {
+    if (!Array.isArray(listings)) return 0
+    return listings.filter(l => l?.match_score === undefined || l?.match_score === null).length
+  }, [listings])
 
   // --- Open detail ---
   const openDetail = useCallback((l: Listing) => {
@@ -719,6 +849,7 @@ export default function Page() {
 
   // --- Schedule name helper ---
   const getScheduleName = (sched: Schedule) => {
+    if (!sched) return 'Unbekannt'
     if (sched.id === SEARCH_SCHEDULE_ID || sched.agent_id === SEARCH_AGENT_ID) return 'Immobilien-Suchagent'
     if (sched.id === MATCH_SCHEDULE_ID || sched.agent_id === MATCH_AGENT_ID) return 'Match-Analyse Agent'
     return sched?.agent_id?.slice(0, 8) ?? 'Unbekannt'
@@ -755,7 +886,7 @@ export default function Page() {
           <header className="h-12 flex items-center justify-between px-4 border-b border-border flex-shrink-0 bg-card/50">
             <div className="flex items-center gap-3">
               <button onClick={() => setSidebarOpen(p => !p)} className="lg:hidden p-1 text-muted-foreground hover:text-foreground"><Menu className="h-5 w-5" /></button>
-              <h1 className="text-sm font-semibold text-foreground capitalize">{NAV_ITEMS.find(n => n.key === activeNav)?.label}</h1>
+              <h1 className="text-sm font-semibold text-foreground capitalize">{NAV_ITEMS.find(n => n.key === activeNav)?.label ?? 'Dashboard'}</h1>
               {activeAgentId && (
                 <Badge variant="outline" className="text-[10px] gap-1 animate-pulse border-primary text-primary">
                   <Loader2 className="h-3 w-3 animate-spin" />
@@ -809,7 +940,7 @@ export default function Page() {
                     <KpiCard label="Naechste Suche in" value={countdown} sub="alle 6 Stunden" icon={<Clock className="h-5 w-5" />} />
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <Button onClick={triggerSearch} disabled={searchLoading} className="gap-2" size="sm">
                       {searchLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                       Suche jetzt starten
@@ -818,6 +949,12 @@ export default function Page() {
                       <SlidersHorizontal className="h-4 w-4" />
                       Suchprofil bearbeiten
                     </Button>
+                    {unscoredCount > 0 && (
+                      <Button variant="outline" size="sm" className="gap-2 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10" onClick={() => setActiveNav('einstellungen')}>
+                        <Star className="h-4 w-4" />
+                        {unscoredCount} Inserate ohne Score - Analyse starten
+                      </Button>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -825,7 +962,7 @@ export default function Page() {
                       <h3 className="text-sm font-semibold mb-2 flex items-center gap-2 text-foreground"><TrendingUp className="h-4 w-4 text-green-400" /> Top-Matches</h3>
                       <div className="space-y-2">
                         {sampleData && topMatches.length > 0 ? topMatches.map(l => (
-                          <ListingCard key={l.id} listing={l} onSelect={openDetail} onToggleFav={toggleFavorite} isFav={favorites.includes(l.id)} />
+                          <ListingCard key={getListingId(l)} listing={l} onSelect={openDetail} onToggleFav={toggleFavorite} isFav={favorites.includes(getListingId(l))} />
                         )) : (
                           <Card className="bg-card"><CardContent className="p-6 text-center text-muted-foreground text-sm">Noch keine Top-Matches. Starte eine Suche!</CardContent></Card>
                         )}
@@ -835,7 +972,7 @@ export default function Page() {
                       <h3 className="text-sm font-semibold mb-2 flex items-center gap-2 text-foreground"><CircleDot className="h-4 w-4 text-primary" /> Neue Treffer</h3>
                       <div className="space-y-2">
                         {sampleData && recentListings.length > 0 ? recentListings.map(l => (
-                          <ListingCard key={l.id} listing={l} onSelect={openDetail} onToggleFav={toggleFavorite} isFav={favorites.includes(l.id)} />
+                          <ListingCard key={getListingId(l)} listing={l} onSelect={openDetail} onToggleFav={toggleFavorite} isFav={favorites.includes(getListingId(l))} />
                         )) : (
                           <Card className="bg-card"><CardContent className="p-6 text-center text-muted-foreground text-sm">Keine neuen Treffer. Starte eine Suche!</CardContent></Card>
                         )}
@@ -850,10 +987,10 @@ export default function Page() {
                         {sampleData && searchRuns.length > 0 ? searchRuns.slice(0, 5).map(run => (
                           <div key={run.id} className="flex items-center gap-3 text-xs py-1.5 border-b border-border last:border-0">
                             {run.status === 'success' ? <CheckCircle2 className="h-3.5 w-3.5 text-green-400 flex-shrink-0" /> : run.status === 'error' ? <XCircle className="h-3.5 w-3.5 text-destructive flex-shrink-0" /> : <Loader2 className="h-3.5 w-3.5 animate-spin text-primary flex-shrink-0" />}
-                            <span className="text-muted-foreground font-mono">{formatTimestamp(run.timestamp)}</span>
-                            <span className="text-foreground">{run.portals_scanned} Portale</span>
-                            <span className="text-muted-foreground">{run.results_found} Treffer</span>
-                            <Badge variant="secondary" className="text-[10px] ml-auto">{run.new_listings} neu</Badge>
+                            <span className="text-muted-foreground font-mono">{fmtTs(run?.timestamp ?? '')}</span>
+                            <span className="text-foreground">{run?.portals_scanned ?? 0} Portale</span>
+                            <span className="text-muted-foreground">{run?.results_found ?? 0} Treffer</span>
+                            <Badge variant="secondary" className="text-[10px] ml-auto">{run?.new_listings ?? 0} neu</Badge>
                           </div>
                         )) : (
                           <p className="text-sm text-muted-foreground text-center py-4">Noch keine Suchlaeufe.</p>
@@ -1000,7 +1137,7 @@ export default function Page() {
                   {filteredListings.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                       {filteredListings.map(l => (
-                        <ListingCard key={l.id} listing={l} onSelect={openDetail} onToggleFav={toggleFavorite} isFav={favorites.includes(l.id)} />
+                        <ListingCard key={getListingId(l)} listing={l} onSelect={openDetail} onToggleFav={toggleFavorite} isFav={favorites.includes(getListingId(l))} />
                       ))}
                     </div>
                   ) : (
@@ -1029,7 +1166,7 @@ export default function Page() {
                   {favoriteListings.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                       {favoriteListings.map(l => (
-                        <ListingCard key={l.id} listing={l} onSelect={openDetail} onToggleFav={toggleFavorite} isFav={true} />
+                        <ListingCard key={getListingId(l)} listing={l} onSelect={openDetail} onToggleFav={toggleFavorite} isFav={true} />
                       ))}
                     </div>
                   ) : (
@@ -1065,10 +1202,10 @@ export default function Page() {
                         {(sampleData ? searchRuns : []).map(run => (
                           <React.Fragment key={run.id}>
                             <TableRow className="border-border hover:bg-secondary/30 cursor-pointer" onClick={() => setExpandedRun(expandedRun === run.id ? null : run.id)}>
-                              <TableCell className="text-xs font-mono">{formatTimestamp(run.timestamp)}</TableCell>
-                              <TableCell className="text-xs">{run.portals_scanned}</TableCell>
-                              <TableCell className="text-xs">{run.results_found}</TableCell>
-                              <TableCell className="text-xs"><Badge variant="secondary" className="text-[10px]">{run.new_listings}</Badge></TableCell>
+                              <TableCell className="text-xs font-mono">{fmtTs(run?.timestamp ?? '')}</TableCell>
+                              <TableCell className="text-xs">{run?.portals_scanned ?? 0}</TableCell>
+                              <TableCell className="text-xs">{run?.results_found ?? 0}</TableCell>
+                              <TableCell className="text-xs"><Badge variant="secondary" className="text-[10px]">{run?.new_listings ?? 0}</Badge></TableCell>
                               <TableCell className="text-xs">
                                 {run.status === 'success' ? <Badge variant="secondary" className="text-[10px] bg-green-500/10 text-green-400">Erfolg</Badge> : <Badge variant="destructive" className="text-[10px]">Fehler</Badge>}
                               </TableCell>
@@ -1079,13 +1216,13 @@ export default function Page() {
                             {expandedRun === run.id && (
                               <TableRow className="border-border">
                                 <TableCell colSpan={6} className="p-3 bg-secondary/20">
-                                  {Array.isArray(run.listings) && run.listings.length > 0 ? (
+                                  {Array.isArray(run?.listings) && run.listings.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                       {run.listings.map((l: Listing) => (
-                                        <div key={l.id} className="flex items-center gap-2 p-2 bg-card rounded text-xs">
-                                          <span className="font-medium truncate flex-1">{l.title}</span>
-                                          <span className="text-muted-foreground">{l.cold_rent} EUR</span>
-                                          <Badge variant="outline" className="text-[10px]">{l.district}</Badge>
+                                        <div key={getListingId(l)} className="flex items-center gap-2 p-2 bg-card rounded text-xs">
+                                          <span className="font-medium truncate flex-1">{l?.title ?? 'Unbekannt'}</span>
+                                          <span className="text-muted-foreground">{l?.cold_rent ?? 0} EUR</span>
+                                          <Badge variant="outline" className="text-[10px]">{l?.district ?? '---'}</Badge>
                                         </div>
                                       ))}
                                     </div>
@@ -1128,7 +1265,7 @@ export default function Page() {
                     </div>
                     {schedError && <p className="text-xs text-destructive">{schedError}</p>}
 
-                    {schedLoading && schedules.length === 0 ? (
+                    {schedInitLoading && schedules.length === 0 ? (
                       <div className="space-y-3">
                         <Skeleton className="h-24 w-full" />
                         <Skeleton className="h-24 w-full" />
@@ -1139,9 +1276,10 @@ export default function Page() {
                           { id: SEARCH_SCHEDULE_ID, name: 'Immobilien-Suchagent', desc: 'Durchsucht Portale nach neuen Inseraten', cron: '0 */6 * * *', agentId: SEARCH_AGENT_ID },
                           { id: MATCH_SCHEDULE_ID, name: 'Match-Analyse Agent', desc: 'Bewertet Inserate und sendet E-Mails', cron: '0 8 * * *', agentId: MATCH_AGENT_ID },
                         ].map(sConfig => {
-                          const liveSched = schedules.find(s => s.id === sConfig.id)
+                          const liveSched = schedules.find(s => s?.id === sConfig.id)
                           const isActive = liveSched?.is_active ?? true
                           const nextRun = liveSched?.next_run_time ?? null
+                          const cronExpr = liveSched?.cron_expression ?? sConfig.cron
                           return (
                             <Card key={sConfig.id} className="bg-card">
                               <CardContent className="p-4">
@@ -1155,9 +1293,9 @@ export default function Page() {
                                     </div>
                                     <p className="text-xs text-muted-foreground mb-2">{sConfig.desc}</p>
                                     <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-                                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {cronToHuman(liveSched?.cron_expression ?? sConfig.cron)}</span>
+                                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {cronExpr ? cronToHuman(cronExpr) : '---'}</span>
                                       <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> Europe/Berlin</span>
-                                      {nextRun && <span className="flex items-center gap-1"><RefreshCw className="h-3 w-3" /> Naechster Lauf: {formatTimestamp(nextRun)}</span>}
+                                      {nextRun && <span className="flex items-center gap-1"><RefreshCw className="h-3 w-3" /> Naechster Lauf: {fmtTs(nextRun)}</span>}
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -1180,22 +1318,22 @@ export default function Page() {
                           )
                         })}
 
-                        {schedules.filter(s => s.id !== SEARCH_SCHEDULE_ID && s.id !== MATCH_SCHEDULE_ID).map(sched => (
+                        {schedules.filter(s => s?.id !== SEARCH_SCHEDULE_ID && s?.id !== MATCH_SCHEDULE_ID).map(sched => (
                           <Card key={sched.id} className="bg-card">
                             <CardContent className="p-4">
                               <div className="flex items-start justify-between gap-3">
                                 <div>
                                   <div className="flex items-center gap-2 mb-1">
                                     <h4 className="text-sm font-semibold text-foreground">{getScheduleName(sched)}</h4>
-                                    <Badge variant={sched.is_active ? 'default' : 'secondary'} className="text-[10px]">{sched.is_active ? 'Aktiv' : 'Pausiert'}</Badge>
+                                    <Badge variant={sched?.is_active ? 'default' : 'secondary'} className="text-[10px]">{sched?.is_active ? 'Aktiv' : 'Pausiert'}</Badge>
                                   </div>
-                                  <p className="text-xs text-muted-foreground">{cronToHuman(sched.cron_expression)} | {sched.timezone}</p>
+                                  <p className="text-xs text-muted-foreground">{sched?.cron_expression ? cronToHuman(sched.cron_expression) : '---'} | {sched?.timezone ?? 'UTC'}</p>
                                 </div>
                                 <div className="flex gap-1.5">
                                   <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => handleToggleSchedule(sched)} disabled={schedLoading}>
-                                    {sched.is_active ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                                    {sched?.is_active ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                                   </Button>
-                                  <Button variant="secondary" size="sm" className="text-xs h-7" onClick={() => handleTriggerNow(sched.id)} disabled={schedLoading}>
+                                  <Button variant="secondary" size="sm" className="text-xs h-7" onClick={() => handleTriggerNow(sched?.id)} disabled={schedLoading}>
                                     <Zap className="h-3 w-3" />
                                   </Button>
                                 </div>
@@ -1258,14 +1396,14 @@ export default function Page() {
                         </TableHeader>
                         <TableBody>
                           {scheduleLogs.length > 0 ? scheduleLogs.map(log => (
-                            <TableRow key={log.id} className="border-border">
-                              <TableCell className="text-xs font-mono">{formatTimestamp(log.executed_at)}</TableCell>
-                              <TableCell className="text-xs">{log.agent_id === SEARCH_AGENT_ID ? 'Suchagent' : log.agent_id === MATCH_AGENT_ID ? 'Match-Agent' : (log?.agent_id?.slice(0, 8) ?? '---')}</TableCell>
-                              <TableCell className="text-xs">{log.attempt}/{log.max_attempts}</TableCell>
+                            <TableRow key={log?.id ?? Math.random()} className="border-border">
+                              <TableCell className="text-xs font-mono">{fmtTs(log?.executed_at ?? '')}</TableCell>
+                              <TableCell className="text-xs">{log?.agent_id === SEARCH_AGENT_ID ? 'Suchagent' : log?.agent_id === MATCH_AGENT_ID ? 'Match-Agent' : (log?.agent_id?.slice(0, 8) ?? '---')}</TableCell>
+                              <TableCell className="text-xs">{log?.attempt ?? 0}/{log?.max_attempts ?? 0}</TableCell>
                               <TableCell className="text-xs">
-                                {log.success ? <Badge variant="secondary" className="text-[10px] bg-green-500/10 text-green-400">Erfolg</Badge> : <Badge variant="destructive" className="text-[10px]">Fehler</Badge>}
+                                {log?.success ? <Badge variant="secondary" className="text-[10px] bg-green-500/10 text-green-400">Erfolg</Badge> : <Badge variant="destructive" className="text-[10px]">Fehler</Badge>}
                               </TableCell>
-                              <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]">{log.error_message ?? '---'}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]">{log?.error_message ?? '---'}</TableCell>
                             </TableRow>
                           )) : (
                             <TableRow className="border-border">
@@ -1314,14 +1452,19 @@ export default function Page() {
             {selectedListing && (
               <div className="space-y-4 mt-4">
                 <div className="flex items-center gap-4">
-                  <CircularScore score={selectedListing.match_score ?? 0} size={64} />
+                  <CircularScore score={selectedListing?.match_score ?? 0} size={64} unscored={selectedListing?.match_score === undefined || selectedListing?.match_score === null} />
                   <div>
-                    <p className="text-sm font-semibold">Match-Score: {selectedListing.match_score ?? 0}%</p>
-                    <Badge variant="secondary" className="text-[10px] mt-0.5">{selectedListing.category ?? 'unbewertet'}</Badge>
+                    <p className="text-sm font-semibold">
+                      Match-Score: {selectedListing?.match_score !== undefined && selectedListing?.match_score !== null ? `${selectedListing.match_score}%` : 'Nicht bewertet'}
+                    </p>
+                    <Badge variant="secondary" className="text-[10px] mt-0.5">{selectedListing?.category ?? 'Nicht bewertet'}</Badge>
+                    {(selectedListing?.match_score === undefined || selectedListing?.match_score === null) && (
+                      <p className="text-[10px] text-muted-foreground mt-1">Starte die Match-Analyse unter Einstellungen, um einen Score zu berechnen.</p>
+                    )}
                   </div>
                 </div>
 
-                {selectedListing.score_breakdown && (
+                {selectedListing?.score_breakdown && (
                   <Card className="bg-secondary/30">
                     <CardContent className="p-3 space-y-1.5">
                       <h4 className="text-xs font-semibold mb-1">Score-Aufschluesselung</h4>
@@ -1339,34 +1482,34 @@ export default function Page() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <p className="text-[10px] text-muted-foreground">Kaltmiete</p>
-                    <p className="text-sm font-bold">{selectedListing.cold_rent} EUR</p>
+                    <p className="text-sm font-bold">{selectedListing?.cold_rent ?? 0} EUR</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] text-muted-foreground">Warmmiete</p>
-                    <p className="text-sm font-bold">{selectedListing.warm_rent} EUR</p>
+                    <p className="text-sm font-bold">{selectedListing?.warm_rent ?? 0} EUR</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] text-muted-foreground">Groesse</p>
-                    <p className="text-sm font-bold">{selectedListing.size_sqm} m2</p>
+                    <p className="text-sm font-bold">{selectedListing?.size_sqm ?? 0} m2</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] text-muted-foreground">Zimmer</p>
-                    <p className="text-sm font-bold">{selectedListing.rooms}</p>
+                    <p className="text-sm font-bold">{selectedListing?.rooms ?? 0}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] text-muted-foreground">Bezirk</p>
-                    <Badge variant="secondary" className="text-xs">{selectedListing.district}</Badge>
+                    <Badge variant="secondary" className="text-xs">{selectedListing?.district ?? '---'}</Badge>
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] text-muted-foreground">Verfuegbar ab</p>
-                    <p className="text-sm">{selectedListing.availability}</p>
+                    <p className="text-sm">{selectedListing?.availability ?? '---'}</p>
                   </div>
                 </div>
 
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Ausstattung</p>
                   <div className="flex flex-wrap gap-1">
-                    {Array.isArray(selectedListing.features) && selectedListing.features.map(f => (
+                    {Array.isArray(selectedListing?.features) && selectedListing.features.map(f => (
                       <Badge key={f} variant="secondary" className="text-[10px]">{f}</Badge>
                     ))}
                   </div>
@@ -1375,23 +1518,23 @@ export default function Page() {
                 <div className="space-y-2">
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-0.5">Portal</p>
-                    <Badge variant="outline" className="text-xs">{selectedListing.portal}</Badge>
+                    <Badge variant="outline" className="text-xs">{selectedListing?.portal ?? '---'}</Badge>
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-0.5">Kontakt</p>
-                    <p className="text-xs">{selectedListing.contact_info}</p>
+                    <p className="text-xs">{selectedListing?.contact_info ?? '---'}</p>
                   </div>
                 </div>
 
                 <div className="flex gap-2 pt-2">
                   <Button size="sm" asChild className="gap-2 flex-1">
-                    <a href={selectedListing.listing_url} target="_blank" rel="noopener noreferrer">
+                    <a href={selectedListing?.listing_url ?? '#'} target="_blank" rel="noopener noreferrer">
                       <ExternalLink className="h-4 w-4" /> Auf Portal oeffnen
                     </a>
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => toggleFavorite(selectedListing.id)} className="gap-2">
-                    <Heart className={cn('h-4 w-4', favorites.includes(selectedListing.id) ? 'fill-red-500 text-red-500' : '')} />
-                    {favorites.includes(selectedListing.id) ? 'Entfernen' : 'Favorit'}
+                  <Button variant="outline" size="sm" onClick={() => toggleFavorite(getListingId(selectedListing))} className="gap-2">
+                    <Heart className={cn('h-4 w-4', favorites.includes(getListingId(selectedListing)) ? 'fill-red-500 text-red-500' : '')} />
+                    {favorites.includes(getListingId(selectedListing)) ? 'Entfernen' : 'Favorit'}
                   </Button>
                 </div>
               </div>
